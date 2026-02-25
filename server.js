@@ -11,6 +11,7 @@ const cors = require('cors');
 const initMqttListener = require('./services/mqttListener');
 const SystemLog = require('./models/SystemLog');
 const apiRoutes = require('./routes/api');
+const { checkDeviceOffline } = require('./services/alertService');
 
 const app = express();
 const server = http.createServer(app);
@@ -30,7 +31,11 @@ app.use(express.json());
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/mfc_database';
 
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('✅ MongoDB Connected Successfully'))
+  .then(() => {
+    console.log('✅ MongoDB Connected Successfully');
+    // Start device offline detection — runs every 30 s after DB is ready
+    setInterval(() => checkDeviceOffline(io, SystemLog), 30_000);
+  })
   .catch(err => console.error('❌ MongoDB Connection Error:', err));
 
 // 3. Initialize MQTT Listener

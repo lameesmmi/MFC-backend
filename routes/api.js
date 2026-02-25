@@ -3,6 +3,8 @@
 const express = require('express');
 const router = express.Router();
 const SystemLog = require('../models/SystemLog');
+const Alert = require('../models/Alert');
+const { formatAlert } = require('../services/alertService');
 
 // ─── Health ──────────────────────────────────────────────────────────────────
 
@@ -28,6 +30,62 @@ router.get('/readings', async (req, res) => {
 
     const data = docs.reverse().map(formatReading);
     res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Alerts ───────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/alerts?status=active&limit=100
+ * Returns alerts newest-first. Optionally filter by status.
+ */
+router.get('/alerts', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+    const query = req.query.status ? { status: req.query.status } : {};
+
+    const docs = await Alert.find(query)
+      .sort({ timestamp: -1 })
+      .limit(limit)
+      .lean();
+
+    res.json(docs.map(formatAlert));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PATCH /api/alerts/:id/acknowledge
+ */
+router.patch('/alerts/:id/acknowledge', async (req, res) => {
+  try {
+    const doc = await Alert.findOneAndUpdate(
+      { _id: req.params.id, status: 'active' },
+      { status: 'acknowledged' },
+      { new: true }
+    ).lean();
+    if (!doc) return res.status(404).json({ error: 'Active alert not found' });
+    res.json(formatAlert(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PATCH /api/alerts/:id/resolve
+ */
+router.patch('/alerts/:id/resolve', async (req, res) => {
+  try {
+    const doc = await Alert.findOneAndUpdate(
+      { _id: req.params.id, status: { $in: ['active', 'acknowledged'] } },
+      { status: 'resolved', resolvedAt: new Date() },
+      { new: true }
+    ).lean();
+    if (!doc) return res.status(404).json({ error: 'Unresolved alert not found' });
+    res.json(formatAlert(doc));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

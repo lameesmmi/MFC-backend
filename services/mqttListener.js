@@ -9,6 +9,7 @@
 
 const mqtt = require('mqtt');
 const { validateTelemetry } = require('../validations/telemetryValidator');
+const { processTelemetryAlerts } = require('./alertService');
 
 // ─────────────────────────────────────────────────────────────────────────
 // Configuration
@@ -130,7 +131,10 @@ async function handleTelemetry(rawPayload, io, SystemLog) {
     });
   }
 
-  // Step 3: Emit to frontend (immediate, non-blocking)
+  // Step 3: Evaluate thresholds and fire/clear alerts (non-blocking)
+  processTelemetryAlerts(io, validatedData);
+
+  // Step 4: Emit to frontend (immediate, non-blocking)
   io.emit('live_telemetry', validatedData);
 }
 
