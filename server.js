@@ -10,6 +10,7 @@ const cors = require('cors');
 // Import our custom modules
 const initMqttListener = require('./services/mqttListener');
 const SystemLog = require('./models/SystemLog');
+const apiRoutes = require('./routes/api');
 
 const app = express();
 const server = http.createServer(app);
@@ -36,10 +37,8 @@ mongoose.connect(MONGO_URI)
 // We pass 'io' so it can emit live data, and 'SystemLog' so it can save to DB
 const mqttClient = initMqttListener(io, SystemLog);
 
-// 4. Basic API Routes (Optional: for fetching historical data later)
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'Backend is running', time: new Date() });
-});
+// 4. API Routes
+app.use('/api', apiRoutes);
 
 // 5. Socket.io Connection Log
 io.on('connection', (socket) => {
