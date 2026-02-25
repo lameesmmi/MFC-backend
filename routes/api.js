@@ -45,20 +45,37 @@ const RANGE_MS = { '24h': 86_400_000, '7d': 604_800_000, '30d': 2_592_000_000 };
  */
 router.get('/analytics', async (req, res) => {
   try {
-    const range   = RANGE_MS[req.query.range] ? req.query.range : '24h';
-    const rangeMs = RANGE_MS[range];
-    const since   = new Date(Date.now() - rangeMs);
+    let since, until, range, timeFmt, bucketDurationHrs;
 
-    // Hourly buckets for 24h, daily buckets for 7d/30d
-    const timeFmt            = range === '24h' ? '%Y-%m-%dT%H:00' : '%Y-%m-%d';
-    const bucketDurationHrs  = range === '24h' ? 1 : 24;
+    if (req.query.from && req.query.to) {
+      const fromDate = new Date(req.query.from);
+      const toDate   = new Date(req.query.to);
+      if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+        return res.status(400).json({ error: 'Invalid date format for from/to' });
+      }
+      since = fromDate;
+      until = toDate;
+      until.setHours(23, 59, 59, 999);
+      range = 'custom';
+      const rangeDays     = (until - since) / 86_400_000;
+      timeFmt             = rangeDays <= 2 ? '%Y-%m-%dT%H:00' : '%Y-%m-%d';
+      bucketDurationHrs   = rangeDays <= 2 ? 1 : 24;
+    } else {
+      range               = RANGE_MS[req.query.range] ? req.query.range : '24h';
+      since               = new Date(Date.now() - RANGE_MS[range]);
+      until               = new Date();
+      timeFmt             = range === '24h' ? '%Y-%m-%dT%H:00' : '%Y-%m-%d';
+      bucketDurationHrs   = range === '24h' ? 1 : 24;
+    }
+
+    const tsFilter = { $gte: since, $lte: until };
 
     const [buckets, [summary], failedParams, alertsBySensor, alertsBySeverity, [resolutionStats]] =
       await Promise.all([
 
         // ── Time-bucketed sensor averages + EOR pass/fail counts ──────────────
         SystemLog.aggregate([
-          { $match: { timestamp: { $gte: since } } },
+          { $match: { timestamp: tsFilter } },
           { $group: {
             _id:        { $dateToString: { format: timeFmt, date: '$timestamp' } },
             avgPower:   { $avg: '$readings.power'       },
@@ -74,7 +91,7 @@ router.get('/analytics', async (req, res) => {
 
         // ── Overall summary for the period ────────────────────────────────────
         SystemLog.aggregate([
-          { $match: { timestamp: { $gte: since } } },
+          { $match: { timestamp: tsFilter } },
           { $group: {
             _id:           null,
             totalReadings: { $sum: 1 },
@@ -85,7 +102,7 @@ router.get('/analytics', async (req, res) => {
 
         // ── Failure counts per sensor (from failed_parameters array) ──────────
         SystemLog.aggregate([
-          { $match: { timestamp: { $gte: since }, 'validation.failed_parameters.0': { $exists: true } } },
+          { $match: { timestamp: tsFilter, 'validation.failed_parameters.0': { $exists: true } } },
           { $unwind: '$validation.failed_parameters' },
           { $group: { _id: '$validation.failed_parameters', count: { $sum: 1 } } },
           { $sort: { count: -1 } },
@@ -93,20 +110,20 @@ router.get('/analytics', async (req, res) => {
 
         // ── Alert count grouped by sensor ─────────────────────────────────────
         Alert.aggregate([
-          { $match: { timestamp: { $gte: since } } },
+          { $match: { timestamp: tsFilter } },
           { $group: { _id: '$sensor', count: { $sum: 1 } } },
           { $sort: { count: -1 } },
         ]),
 
         // ── Alert count grouped by severity ───────────────────────────────────
         Alert.aggregate([
-          { $match: { timestamp: { $gte: since } } },
+          { $match: { timestamp: tsFilter } },
           { $group: { _id: '$severity', count: { $sum: 1 } } },
         ]),
 
         // ── Average resolution time for resolved alerts ───────────────────────
         Alert.aggregate([
-          { $match: { timestamp: { $gte: since }, status: 'resolved', resolvedAt: { $exists: true } } },
+          { $match: { timestamp: tsFilter, status: 'resolved', resolvedAt: { $exists: true } } },
           { $group: {
             _id:             null,
             avgResolutionMs: { $avg: { $subtract: ['$resolvedAt', '$timestamp'] } },
