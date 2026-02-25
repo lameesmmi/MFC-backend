@@ -27,6 +27,9 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 
+// Make Socket.io instance accessible inside route handlers via req.app.get('io')
+app.set('io', io);
+
 // 2. MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/mfc_database';
 

@@ -1,6 +1,7 @@
 'use strict';
 
 const Alert = require('../models/Alert');
+const settingsService = require('./settingsService');
 
 // ─── In-memory deduplication ──────────────────────────────────────────────────
 // Tracks which sensor:severity combinations already have an active alert.
@@ -8,35 +9,28 @@ const Alert = require('../models/Alert');
 // Populated lazily from DB so it survives restarts.
 const activeKeys = new Set(); // `${sensor}:${severity}`
 
-// ─── Threshold definitions ────────────────────────────────────────────────────
-// Each entry: { sensor, severity, label, threshold, check(payload) → bool }
-// check() returns true when the alert SHOULD fire.
-const THRESHOLD_RULES = [
-  {
-    sensor: 'ph', severity: 'warning',
-    label: 'pH Sensor', threshold: '6.5 – 8.5',
-    check: p => p.ph < 6.5 || p.ph > 8.5,
-    message: p => `pH at ${p.ph.toFixed(2)} is outside safe range (6.5 – 8.5)`,
-  },
-  {
-    sensor: 'tds', severity: 'warning',
-    label: 'TDS Sensor', threshold: '≤ 5000 ppm',
-    check: p => p.tds > 5000,
-    message: p => `TDS at ${p.tds.toFixed(0)} ppm exceeds EOR limit of 5000 ppm`,
-  },
-  {
-    sensor: 'temperature', severity: 'warning',
-    label: 'Temperature Sensor', threshold: '10 – 40 °C',
-    check: p => p.temperature < 10 || p.temperature > 40,
-    message: p => `Temperature at ${p.temperature.toFixed(1)} °C is outside safe range (10 – 40 °C)`,
-  },
-  {
-    sensor: 'flow_rate', severity: 'warning',
-    label: 'Flow Rate Sensor', threshold: '0.5 – 10 L/min',
-    check: p => p.flow_rate < 0.5 || p.flow_rate > 10,
-    message: p => `Flow rate at ${p.flow_rate.toFixed(2)} L/min is outside safe range (0.5 – 10 L/min)`,
-  },
-];
+// ─── Dynamic threshold rules ──────────────────────────────────────────────────
+// Rules are built from the persisted settings on every telemetry packet so that
+// changes made in the Settings page take effect immediately.
+
+const UNITS = { ph: 'pH', tds: 'ppm', temperature: '°C', flow_rate: 'L/min', voltage: 'V', current: 'A' };
+const DECIMALS = { ph: 2, tds: 0, temperature: 1, flow_rate: 2, voltage: 2, current: 3 };
+
+function buildThresholdRules(thresholds) {
+  return ['ph', 'tds', 'temperature', 'flow_rate'].map(sensor => {
+    const { min, max, severity } = thresholds[sensor];
+    const unit    = UNITS[sensor];
+    const dec     = DECIMALS[sensor];
+    const rangeStr = sensor === 'tds' ? `≤ ${max} ${unit}` : `${min} – ${max} ${unit}`;
+    return {
+      sensor,
+      severity,
+      threshold: rangeStr,
+      check:   p => (min > 0 && p[sensor] < min) || p[sensor] > max,
+      message: p => `${sensor.replace('_', ' ')} at ${Number(p[sensor]).toFixed(dec)} ${unit} is outside safe range (${rangeStr})`,
+    };
+  });
+}
 
 const OFFLINE_THRESHOLD_MS = 60_000; // 60 s without telemetry → device offline alert
 
@@ -90,11 +84,24 @@ async function resolveAlertsForSensor(io, sensor) {
 
 /**
  * Called after every valid telemetry packet.
- * Evaluates all threshold rules and fires/clears alerts as needed.
+ * Loads the latest settings, then evaluates all threshold rules and fires/clears alerts.
  */
 async function processTelemetryAlerts(io, payload) {
   try {
-    for (const rule of THRESHOLD_RULES) {
+    const settings = await settingsService.getSettings();
+
+    // If alerts are globally disabled, still resolve any existing active alerts
+    // so the UI doesn't show stale active alerts when the toggle is off.
+    if (!settings.alertsEnabled) {
+      for (const sensor of ['ph', 'tds', 'temperature', 'flow_rate']) {
+        await resolveAlertsForSensor(io, sensor);
+      }
+      return;
+    }
+
+    const rules = buildThresholdRules(settings.thresholds);
+
+    for (const rule of rules) {
       if (rule.check(payload)) {
         await createAlert(io, {
           severity:  rule.severity,

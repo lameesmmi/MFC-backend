@@ -4,7 +4,9 @@ const express = require('express');
 const router = express.Router();
 const SystemLog = require('../models/SystemLog');
 const Alert = require('../models/Alert');
+const Settings = require('../models/Settings');
 const { formatAlert } = require('../services/alertService');
+const { invalidateCache, DEFAULTS } = require('../services/settingsService');
 
 // ─── Health ──────────────────────────────────────────────────────────────────
 
@@ -229,6 +231,90 @@ router.patch('/alerts/:id/resolve', async (req, res) => {
   }
 });
 
+// ─── Settings ─────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/settings
+ * Returns the current system settings (creates defaults if none exist).
+ */
+router.get('/settings', async (req, res) => {
+  try {
+    let doc = await Settings.findOne().lean();
+    if (!doc) {
+      const created = await Settings.create({});
+      doc = created.toObject();
+    }
+    res.json(formatSettings(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PUT /api/settings
+ * Validates and persists updated settings, then broadcasts to all clients.
+ *
+ * Body: { thresholds?: { [sensor]: { min, max, severity? } }, alertsEnabled?: boolean }
+ */
+router.put('/settings', async (req, res) => {
+  try {
+    const { thresholds, alertsEnabled } = req.body;
+    const update = {};
+
+    if (thresholds && typeof thresholds === 'object') {
+      for (const [key, val] of Object.entries(thresholds)) {
+        if (typeof val.min !== 'number' || typeof val.max !== 'number') {
+          return res.status(400).json({ error: `Invalid threshold values for "${key}"` });
+        }
+        if (val.min > val.max) {
+          return res.status(400).json({ error: `min must be ≤ max for "${key}"` });
+        }
+        update[`thresholds.${key}.min`] = val.min;
+        update[`thresholds.${key}.max`] = val.max;
+        if (val.severity === 'warning' || val.severity === 'critical') {
+          update[`thresholds.${key}.severity`] = val.severity;
+        }
+      }
+    }
+
+    if (typeof alertsEnabled === 'boolean') {
+      update.alertsEnabled = alertsEnabled;
+    }
+
+    const doc = await Settings.findOneAndUpdate(
+      {},
+      { $set: update },
+      { new: true, upsert: true }
+    ).lean();
+
+    invalidateCache();
+    req.app.get('io').emit('settings_updated', formatSettings(doc));
+    res.json(formatSettings(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/settings/reset
+ * Restores factory defaults and broadcasts to all clients.
+ */
+router.post('/settings/reset', async (req, res) => {
+  try {
+    const doc = await Settings.findOneAndUpdate(
+      {},
+      { $set: { thresholds: DEFAULTS.thresholds, alertsEnabled: DEFAULTS.alertsEnabled } },
+      { new: true, upsert: true }
+    ).lean();
+
+    invalidateCache();
+    req.app.get('io').emit('settings_updated', formatSettings(doc));
+    res.json(formatSettings(doc));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
@@ -252,6 +338,17 @@ function formatReading(doc) {
     power:            doc.readings.power,
     valveStatus:      doc.valve_status,
     validationStatus: doc.validation?.status,
+  };
+}
+
+/**
+ * Strips internal Mongoose fields and normalises the settings document for the API.
+ */
+function formatSettings(doc) {
+  return {
+    thresholds:    doc.thresholds,
+    alertsEnabled: doc.alertsEnabled,
+    updatedAt:     doc.updatedAt ?? null,
   };
 }
 
