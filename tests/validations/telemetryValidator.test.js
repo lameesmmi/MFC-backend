@@ -45,12 +45,35 @@ describe('validateTelemetry', () => {
       assert.strictEqual(result.valid, false);
     });
 
-    it('should reject missing core fields', () => {
+    it('should reject payload missing timestamp (only required field)', () => {
       const payload = getValidPayload();
-      delete payload.tds;
+      delete payload.timestamp;
       const result = validateTelemetry(payload);
       assert.strictEqual(result.valid, false);
-      assert(result.reason.includes('Missing required field: tds'));
+      assert(result.reason.includes('Missing required field: timestamp'));
+    });
+
+    it('should accept payload missing sensor readings (sensors may be offline)', () => {
+      const payload = { timestamp: new Date().toISOString() };
+      const result = validateTelemetry(payload);
+      assert.strictEqual(result.valid, true);
+    });
+
+    it('should accept payload missing valve_status', () => {
+      const payload = getValidPayload();
+      delete payload.valve_status;
+      const result = validateTelemetry(payload);
+      assert.strictEqual(result.valid, true);
+    });
+
+    it('should accept partial payload with only some sensors present', () => {
+      const payload = {
+        timestamp: new Date().toISOString(),
+        ph: 7.2,
+        temperature: 24.0,
+      };
+      const result = validateTelemetry(payload);
+      assert.strictEqual(result.valid, true);
     });
 
     it('should reject invalid timestamp format', () => {
@@ -139,6 +162,24 @@ describe('validateTelemetry', () => {
       assert.strictEqual(result.payload.validation.status, 'FAIL');
       assert(result.payload.validation.failed_parameters.includes('ph'), true);
       assert(result.payload.validation.failed_parameters.includes('tds'), true);
+    });
+
+    it('should PASS and not flag ph when ph is absent', () => {
+      const payload = getValidPayload();
+      delete payload.ph;
+      const result = validateTelemetry(payload);
+      assert.strictEqual(result.valid, true);
+      assert.strictEqual(result.payload.validation.status, 'PASS');
+      assert(!result.payload.validation.failed_parameters.includes('ph'));
+    });
+
+    it('should PASS and not flag tds when tds is absent', () => {
+      const payload = getValidPayload();
+      delete payload.tds;
+      const result = validateTelemetry(payload);
+      assert.strictEqual(result.valid, true);
+      assert.strictEqual(result.payload.validation.status, 'PASS');
+      assert(!result.payload.validation.failed_parameters.includes('tds'));
     });
   });
 });

@@ -13,22 +13,21 @@ const SystemLogSchema = new mongoose.Schema({
   },
   readings: {
     // Water Quality Metrics
-    ph: { type: Number, required: true },
-    tds: { type: Number, required: true },
-    temperature: { type: Number, required: true },
-    flow_rate: { type: Number, required: true },
-    salinity: { type: Number, required: true },
-    conductivity: { type: Number, required: true },
-    
+    ph:          { type: Number },
+    tds:         { type: Number },
+    temperature: { type: Number },
+    flow_rate:   { type: Number },
+    salinity:    { type: Number },
+    conductivity:{ type: Number },
+
     // Electrical Output Metrics
-    current: { type: Number, required: true },
-    voltage: { type: Number, required: true },
-    power: { type: Number, required: true }
+    current: { type: Number },
+    voltage: { type: Number },
+    power:   { type: Number }
   },
-  valve_status: { 
-    type: String, 
-    enum: ['OPEN', 'CLOSED'], 
-    required: true 
+  valve_status: {
+    type: String,
+    enum: ['OPEN', 'CLOSED'],
   },
   validation: {
     status: { type: String, enum: ['PASS', 'FAIL'], required: true },
