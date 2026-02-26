@@ -30,7 +30,7 @@ const io = new Server(server, {
   },
 });
 
-app.use(cors({ origin: ALLOWED_ORIGIN }));
+app.use(cors({ origin: ALLOWED_ORIGIN, credentials: true }));
 app.use(express.json());
 
 // Make Socket.io instance accessible inside route handlers via req.app.get('io')
