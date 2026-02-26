@@ -2,11 +2,12 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "",
-  "main": "mqttListener.js",
+  "main": "server.js",
   "directories": {
     "test": "tests"
   },
   "scripts": {
+    "start": "node server.js",
     "test": "mocha tests/validations/*.test.js"
   },
   "keywords": [],

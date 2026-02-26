@@ -21,14 +21,16 @@ const app    = express();
 const server = http.createServer(app);
 
 // 1. Configure Socket.io with CORS for your React frontend
+const ALLOWED_ORIGIN = process.env.FRONTEND_URL || '*';
+
 const io = new Server(server, {
   cors: {
-    origin: '*', // In production, replace with your React app's URL
+    origin: ALLOWED_ORIGIN,
     methods: ['GET', 'POST'],
   },
 });
 
-app.use(cors());
+app.use(cors({ origin: ALLOWED_ORIGIN }));
 app.use(express.json());
 
 // Make Socket.io instance accessible inside route handlers via req.app.get('io')

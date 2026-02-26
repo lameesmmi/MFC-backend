@@ -25,6 +25,9 @@ const MQTT_OPTIONS = {
   clean:          true,
   reconnectPeriod: 5_000,  // ms between reconnect attempts
   connectTimeout:  30_000, // ms before giving up on initial connect
+  // HiveMQ Cloud (or any authenticated broker) credentials — set via env vars
+  ...(process.env.MQTT_USERNAME && { username: process.env.MQTT_USERNAME }),
+  ...(process.env.MQTT_PASSWORD && { password: process.env.MQTT_PASSWORD }),
 };
 
 // ─────────────────────────────────────────────────────────────────────────
