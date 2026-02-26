@@ -7,6 +7,7 @@ const Alert = require('../models/Alert');
 const Settings = require('../models/Settings');
 const { formatAlert } = require('../services/alertService');
 const { invalidateCache, DEFAULTS } = require('../services/settingsService');
+const { requireRole } = require('../middleware/auth');
 
 // ─── Health ──────────────────────────────────────────────────────────────────
 
@@ -200,7 +201,7 @@ router.get('/alerts', async (req, res) => {
 /**
  * PATCH /api/alerts/:id/acknowledge
  */
-router.patch('/alerts/:id/acknowledge', async (req, res) => {
+router.patch('/alerts/:id/acknowledge', requireRole('admin', 'operator'), async (req, res) => {
   try {
     const doc = await Alert.findOneAndUpdate(
       { _id: req.params.id, status: 'active' },
@@ -217,7 +218,7 @@ router.patch('/alerts/:id/acknowledge', async (req, res) => {
 /**
  * PATCH /api/alerts/:id/resolve
  */
-router.patch('/alerts/:id/resolve', async (req, res) => {
+router.patch('/alerts/:id/resolve', requireRole('admin', 'operator'), async (req, res) => {
   try {
     const doc = await Alert.findOneAndUpdate(
       { _id: req.params.id, status: { $in: ['active', 'acknowledged'] } },
@@ -256,7 +257,7 @@ router.get('/settings', async (req, res) => {
  *
  * Body: { thresholds?: { [sensor]: { min, max, severity? } }, alertsEnabled?: boolean }
  */
-router.put('/settings', async (req, res) => {
+router.put('/settings', requireRole('admin', 'operator'), async (req, res) => {
   try {
     const { thresholds, alertsEnabled } = req.body;
     const update = {};
@@ -299,7 +300,7 @@ router.put('/settings', async (req, res) => {
  * POST /api/settings/reset
  * Restores factory defaults and broadcasts to all clients.
  */
-router.post('/settings/reset', async (req, res) => {
+router.post('/settings/reset', requireRole('admin'), async (req, res) => {
   try {
     const doc = await Settings.findOneAndUpdate(
       {},
