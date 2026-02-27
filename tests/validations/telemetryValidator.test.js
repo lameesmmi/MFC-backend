@@ -8,7 +8,7 @@
  */
 
 const assert = require('assert');
-const { validateTelemetry, MAX_LATENCY_MS } = require('../../validations/telemetryValidator');
+const { validateTelemetry, MAX_LATENCY_MS, MAX_FUTURE_MS } = require('../../validations/telemetryValidator');
 
 // ─────────────────────────────────────────────────────────────────────────
 // Test Fixtures
@@ -110,7 +110,7 @@ describe('validateTelemetry', () => {
   });
 
   describe('3. Hard Gatekeeper: Latency checks', () => {
-    it('should reject packets older than 5 seconds', () => {
+    it('should reject packets older than MAX_LATENCY_MS', () => {
       const payload = getValidPayload();
       payload.timestamp = new Date(Date.now() - MAX_LATENCY_MS - 1000).toISOString();
       const result = validateTelemetry(payload);
@@ -118,9 +118,16 @@ describe('validateTelemetry', () => {
       assert(result.reason.includes('too old'));
     });
 
-    it('should reject packets from the future', () => {
+    it('should accept packets with small clock drift (within MAX_FUTURE_MS)', () => {
       const payload = getValidPayload();
-      payload.timestamp = new Date(Date.now() + MAX_LATENCY_MS + 1000).toISOString();
+      payload.timestamp = new Date(Date.now() + 5000).toISOString(); // 5 s ahead — normal ESP32 drift
+      const result = validateTelemetry(payload);
+      assert.strictEqual(result.valid, true);
+    });
+
+    it('should reject packets beyond MAX_FUTURE_MS in the future', () => {
+      const payload = getValidPayload();
+      payload.timestamp = new Date(Date.now() + MAX_FUTURE_MS + 1000).toISOString();
       const result = validateTelemetry(payload);
       assert.strictEqual(result.valid, false);
       assert(result.reason.includes('future'));

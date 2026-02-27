@@ -39,6 +39,18 @@ const SCENARIOS = [
     }),
   },
   {
+    name: 'PARTIAL — water quality sensors offline (no ph/tds/salinity/conductivity)',
+    data: () => ({
+      // ph, tds, salinity, conductivity omitted — sensors offline
+      temperature: 26  + rand(-1, 1),
+      flow_rate:   1.6 + rand(-0.1, 0.1),
+      current:     0.55,
+      voltage:     1.25,
+      power:       0.69,
+      valve_status:'OPEN',
+    }),
+  },
+  {
     name: 'pH too low — warning expected',
     data: () => ({
       ph:          5.8 + rand(-0.3, 0.3),   // below 6.5 → alert
@@ -158,18 +170,7 @@ const SCENARIOS = [
       valve_status:'OPEN',
     }),
   },
-  {
-    name: 'PARTIAL — water quality sensors offline (no ph/tds/salinity/conductivity)',
-    data: () => ({
-      // ph, tds, salinity, conductivity omitted — sensors offline
-      temperature: 26  + rand(-1, 1),
-      flow_rate:   1.6 + rand(-0.1, 0.1),
-      current:     0.55,
-      voltage:     1.25,
-      power:       0.69,
-      valve_status:'OPEN',
-    }),
-  },
+  
   {
     name: 'PARTIAL — valve sensor offline (no valve_status)',
     data: () => ({

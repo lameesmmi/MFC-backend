@@ -1,6 +1,9 @@
 'use strict';
 
-const MAX_LATENCY_MS = 5000;
+// How far in the past a packet may be before it's considered stale (e.g. broker-buffered replay)
+const MAX_LATENCY_MS = 30_000;   // 30 s
+// How far in the future a packet may be before it's rejected (accommodates ESP32 clock drift)
+const MAX_FUTURE_MS  = 60_000;   // 60 s
 
 function validateTelemetry(rawPayload) {
   // 1. Basic Object Integrity Check
@@ -61,8 +64,8 @@ function validateTelemetry(rawPayload) {
   const now = Date.now();
   const latency = now - packetDate.getTime();
   
-  if (latency > MAX_LATENCY_MS) return { valid: false, reason: 'Timestamp is too old (latency > 5s)' };
-  if (latency < -MAX_LATENCY_MS) return { valid: false, reason: 'Timestamp is in the future' };
+  if (latency > MAX_LATENCY_MS)  return { valid: false, reason: `Timestamp is too old (latency > ${MAX_LATENCY_MS / 1000}s)` };
+  if (latency < -MAX_FUTURE_MS) return { valid: false, reason: `Timestamp is in the future (drift > ${MAX_FUTURE_MS / 1000}s)` };
 
   // 5. Soft Gatekeeper: EOR Standards Compliance
   const failed_parameters = [];
@@ -87,4 +90,4 @@ function validateTelemetry(rawPayload) {
   return { valid: true, payload: validatedPayload, date: packetDate };
 }
 
-module.exports = { validateTelemetry, MAX_LATENCY_MS };
+module.exports = { validateTelemetry, MAX_LATENCY_MS, MAX_FUTURE_MS };
