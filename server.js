@@ -14,6 +14,7 @@ const SystemLog  = require('./models/SystemLog');
 const apiRoutes  = require('./routes/api');
 const authRoutes = require('./routes/auth');
 const usersRoutes = require('./routes/users');
+const pumpRoutes  = require('./routes/pump');
 const { checkDeviceOffline } = require('./services/alertService');
 const { requireAuth, JWT_SECRET } = require('./middleware/auth');
 
@@ -21,7 +22,7 @@ const app    = express();
 const server = http.createServer(app);
 
 // 1. Configure Socket.io with CORS for your React frontend
-const ALLOWED_ORIGIN = process.env.FRONTEND_URL || '*';
+const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'http://localhost:5173';
 
 const io = new Server(server, {
   cors: {
@@ -47,15 +48,19 @@ mongoose.connect(MONGO_URI)
   })
   .catch(err => console.error('❌ MongoDB Connection Error:', err));
 
-// 3. Initialize MQTT Listener
+// 3. Initialize MQTT Listener and expose client for route handlers
 const mqttClient = initMqttListener(io, SystemLog);
+app.set('mqttClient', mqttClient);
 
 // 4. Auth routes — public (no auth middleware)
 app.use('/api/auth', authRoutes);
 
 // 5. Protected routes
+// Note: pumpRoutes is mounted before the general /api handler so it
+// takes precedence. It carries its own auth via requireRole.
 app.use('/api/users', requireAuth, usersRoutes);
-app.use('/api', requireAuth, apiRoutes);
+app.use('/api/pump',  pumpRoutes);
+app.use('/api',       requireAuth, apiRoutes);
 
 // 6. Socket.io JWT middleware
 io.use((socket, next) => {
