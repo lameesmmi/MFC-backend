@@ -179,20 +179,57 @@ router.get('/analytics', async (req, res) => {
 // ─── Alerts ───────────────────────────────────────────────────────────────────
 
 /**
- * GET /api/alerts?status=active&limit=100
- * Returns alerts newest-first. Optionally filter by status.
+ * GET /api/alerts
+ * Returns alerts newest-first with pagination and multi-value filtering.
+ *
+ * Query params:
+ *   status   – comma-separated: active | acknowledged | resolved  (default: all)
+ *   severity – comma-separated: critical | warning | info          (default: all)
+ *   sensor   – comma-separated: ph | tds | temperature | flow_rate | device (default: all)
+ *   page     – 1-based page number (default: 1)
+ *   limit    – results per page, max 100 (default: 20)
+ *
+ * Response: { data: Alert[], pagination: { total, page, pages, limit } }
  */
 router.get('/alerts', async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit) || 100, 500);
-    const query = req.query.status ? { status: req.query.status } : {};
+    const page  = Math.max(1, parseInt(req.query.page)  || 1);
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit) || 20), 100);
+    const skip  = (page - 1) * limit;
 
-    const docs = await Alert.find(query)
-      .sort({ timestamp: -1 })
-      .limit(limit)
-      .lean();
+    const VALID_STATUSES   = new Set(['active', 'acknowledged', 'resolved']);
+    const VALID_SEVERITIES = new Set(['critical', 'warning', 'info']);
+    const VALID_SENSORS    = new Set(['ph', 'tds', 'temperature', 'flow_rate', 'device']);
 
-    res.json(docs.map(formatAlert));
+    const query = {};
+
+    if (req.query.status) {
+      const vals = req.query.status.split(',').map(s => s.trim()).filter(s => VALID_STATUSES.has(s));
+      if (vals.length === 1) query.status = vals[0];
+      else if (vals.length > 1) query.status = { $in: vals };
+    }
+
+    if (req.query.severity) {
+      const vals = req.query.severity.split(',').map(s => s.trim()).filter(s => VALID_SEVERITIES.has(s));
+      if (vals.length === 1) query.severity = vals[0];
+      else if (vals.length > 1) query.severity = { $in: vals };
+    }
+
+    if (req.query.sensor) {
+      const vals = req.query.sensor.split(',').map(s => s.trim()).filter(s => VALID_SENSORS.has(s));
+      if (vals.length === 1) query.sensor = vals[0];
+      else if (vals.length > 1) query.sensor = { $in: vals };
+    }
+
+    const [docs, total] = await Promise.all([
+      Alert.find(query).sort({ timestamp: -1 }).skip(skip).limit(limit).lean(),
+      Alert.countDocuments(query),
+    ]);
+
+    res.json({
+      data:       docs.map(formatAlert),
+      pagination: { total, page, pages: Math.ceil(total / limit) || 1, limit },
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
