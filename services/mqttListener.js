@@ -18,7 +18,10 @@ const { processTelemetryAlerts } = require('./alertService');
 // Changed default fallback to your local broker for safe testing
 const BROKER_URL = process.env.MQTT_BROKER_URL ?? 'mqtt://localhost:1883';
 const TOPIC_TELEMETRY = 'mfc/system_01/telemetry';
-const TOPIC_ALERTS = 'mfc/system_01/alerts';
+const TOPIC_ALERTS    = 'mfc/system_01/alerts';
+const TOPIC_COMMAND   = 'mfc/system/_01/command';
+
+const VALID_COMMANDS = new Set(['MANUAL_ON', 'MANUAL_OFF', 'AUTO']);
 
 const MQTT_OPTIONS = {
   clientId:       `mfc-backend-${process.pid}-${Date.now()}`,
@@ -43,9 +46,18 @@ const MQTT_OPTIONS = {
  */
 function createMessageHandler(client, io, SystemLog) {
   return async (topic, rawBuffer) => {
-    const raw = rawBuffer.toString('utf8');
+    const raw = rawBuffer.toString('utf8').trim();
 
-    // Parse JSON — malformed frames are dropped immediately
+    // Command topic uses a plain-string payload (not JSON) — handle first.
+    // This covers commands from the HTTP route, the test script, or any
+    // other MQTT publisher, making this the single source of truth for
+    // pump_command Socket.io events.
+    if (topic === TOPIC_COMMAND) {
+      handleCommand(raw, io);
+      return;
+    }
+
+    // All other topics use JSON — malformed frames are dropped immediately.
     let rawPayload;
     try {
       rawPayload = JSON.parse(raw);
@@ -71,6 +83,24 @@ function createMessageHandler(client, io, SystemLog) {
     // Unknown topic
     console.warn(`[mqttListener] Unhandled topic: "${topic}"`);
   };
+}
+
+/**
+ * Handles a pump command received from the MQTT broker.
+ * This fires for commands published by the HTTP route, the test script,
+ * or any other MQTT client — making it the single authoritative source
+ * for pump_command Socket.io events.
+ *
+ * @param {string} command  — raw string payload from the broker
+ * @param {import('socket.io').Server} io
+ */
+function handleCommand(command, io) {
+  if (!VALID_COMMANDS.has(command)) {
+    console.warn(`[mqttListener] Unknown pump command received: "${command}" — ignoring`);
+    return;
+  }
+  console.log(`[mqttListener] 🔧 Pump command confirmed by broker: "${command}"`);
+  io.emit('pump_command', { command, timestamp: new Date().toISOString() });
 }
 
 /**
@@ -181,7 +211,7 @@ function attachConnectionHandlers(client) {
  * Subscribes to telemetry and alert topics.
  */
 function subscribeToTopics(client) {
-  client.subscribe([TOPIC_TELEMETRY, TOPIC_ALERTS], { qos: 1 }, (err, granted) => {
+  client.subscribe([TOPIC_TELEMETRY, TOPIC_ALERTS, TOPIC_COMMAND], { qos: 1 }, (err, granted) => {
     if (err) {
       console.error('[mqttListener] Subscription failed:', err.message);
       return;

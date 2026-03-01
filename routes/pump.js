@@ -55,13 +55,9 @@ router.post('/command', requireRole('admin', 'operator'), async (req, res) => {
     await mqttClient.publishAsync(COMMAND_TOPIC, command, { qos: 1 });
 
     console.log(`[pump] ✅ Command "${command}" published by user ${req.user._id}`);
-
-    // Broadcast to all frontend clients so every tab reflects the new mode
-    req.app.get('io').emit('pump_command', {
-      command,
-      issuedBy:  String(req.user._id),
-      timestamp: new Date().toISOString(),
-    });
+    // pump_command Socket.io event is emitted by mqttListener once the broker
+    // echoes the message back — this ensures all clients (including those that
+    // publish directly to MQTT, e.g. test scripts) update consistently.
 
     res.json({ ok: true, command, topic: COMMAND_TOPIC });
   } catch (err) {
