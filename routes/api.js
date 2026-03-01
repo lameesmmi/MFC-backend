@@ -327,6 +327,9 @@ router.put('/settings', requireRole('admin', 'operator'), async (req, res) => {
 
     invalidateCache();
     req.app.get('io').emit('settings_updated', formatSettings(doc));
+    publishThresholdConfig(req.app, doc.thresholds).catch(err =>
+      console.error('[settings] Failed to push thresholds to ESP32:', err.message)
+    );
     res.json(formatSettings(doc));
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -347,6 +350,9 @@ router.post('/settings/reset', requireRole('admin'), async (req, res) => {
 
     invalidateCache();
     req.app.get('io').emit('settings_updated', formatSettings(doc));
+    publishThresholdConfig(req.app, doc.thresholds).catch(err =>
+      console.error('[settings] Failed to push thresholds to ESP32:', err.message)
+    );
     res.json(formatSettings(doc));
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -388,6 +394,40 @@ function formatSettings(doc) {
     alertsEnabled: doc.alertsEnabled,
     updatedAt:     doc.updatedAt ?? null,
   };
+}
+
+// ─── MQTT config helper ───────────────────────────────────────────────────────
+
+const TOPIC_CONFIG = 'mfc/system/_01/config';
+
+/**
+ * Publishes the current threshold config to the ESP32 via MQTT.
+ * Uses retain:true so the ESP32 receives the latest config immediately
+ * on every connect/reconnect, even if it was offline when settings changed.
+ *
+ * Non-throwing — a failed publish must never fail the HTTP response.
+ *
+ * @param {import('express').Application} app
+ * @param {object} thresholds — thresholds sub-document from the Settings model
+ */
+async function publishThresholdConfig(app, thresholds) {
+  const mqttClient = app.get('mqttClient');
+  if (!mqttClient?.connected) {
+    console.warn('[settings] MQTT not connected — thresholds not pushed to ESP32');
+    return;
+  }
+
+  const payload = JSON.stringify({
+    ph:          { min: thresholds.ph.min,          max: thresholds.ph.max          },
+    tds:         { min: thresholds.tds.min,         max: thresholds.tds.max         },
+    temperature: { min: thresholds.temperature.min, max: thresholds.temperature.max },
+    flow_rate:   { min: thresholds.flow_rate.min,   max: thresholds.flow_rate.max   },
+    voltage:     { min: thresholds.voltage.min,     max: thresholds.voltage.max     },
+    current:     { min: thresholds.current.min,     max: thresholds.current.max     },
+  });
+
+  await mqttClient.publishAsync(TOPIC_CONFIG, payload, { qos: 1, retain: true });
+  console.log('[settings] ⚙️  Thresholds published to ESP32');
 }
 
 module.exports = router;
