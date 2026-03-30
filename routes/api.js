@@ -18,21 +18,42 @@ router.get('/health', (_req, res) => {
 // ─── Sensor Readings ─────────────────────────────────────────────────────────
 
 /**
- * GET /api/readings?limit=100
- * Returns the last N sensor readings from MongoDB, newest-last.
- * Fields are normalized to camelCase for the frontend.
+ * GET /api/readings
+ *
+ * Query params:
+ *   limit – max rows to return (default 100, max 1000)
+ *   from  ��� ISO date string, inclusive lower bound on timestamp (optional)
+ *   to    – ISO date string, inclusive upper bound on timestamp (optional)
+ *   sort  – 'asc' (default, oldest-first — preserves existing behaviour) |
+ *           'desc' (newest-first, used by the analytics raw-data table)
  */
 router.get('/readings', async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+    const limit = Math.min(parseInt(req.query.limit) || 100, 1000);
+    const desc  = req.query.sort === 'desc';
 
-    const docs = await SystemLog.find()
+    const filter = {};
+    if (req.query.from || req.query.to) {
+      filter.timestamp = {};
+      if (req.query.from) {
+        const d = new Date(req.query.from);
+        if (!isNaN(d.getTime())) filter.timestamp.$gte = d;
+      }
+      if (req.query.to) {
+        const d = new Date(req.query.to);
+        if (!isNaN(d.getTime())) filter.timestamp.$lte = d;
+      }
+    }
+
+    // Always query newest-first so the LIMIT keeps the most-recent rows.
+    // For asc callers (e.g. the dashboard chart) we reverse afterward.
+    const docs = await SystemLog.find(filter)
       .sort({ timestamp: -1 })
       .limit(limit)
       .lean();
 
-    const data = docs.reverse().map(formatReading);
-    res.json(data);
+    const data = docs.map(formatReading);
+    res.json(desc ? data : data.reverse());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
