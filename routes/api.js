@@ -42,6 +42,85 @@ router.get('/readings', async (req, res) => {
 
 const RANGE_MS = { '24h': 86_400_000, '7d': 604_800_000, '30d': 2_592_000_000 };
 
+const CORRELATION_SENSORS = new Set([
+  'ph', 'tds', 'temperature', 'flow_rate',
+  'salinity', 'conductivity', 'current', 'voltage', 'power',
+]);
+
+/**
+ * GET /api/analytics/correlation
+ *
+ * Returns raw (x, y) scatter-plot pairs for any two sensor fields over
+ * a given time window.  Only the two requested fields are projected from
+ * the database, making this far cheaper than the full analytics aggregate.
+ *
+ * Query params:
+ *   sensorX – required, one of CORRELATION_SENSORS
+ *   sensorY – required, one of CORRELATION_SENSORS, must differ from sensorX
+ *   range   – '24h' | '7d' | '30d'  (ignored when from+to are supplied)
+ *   from    – ISO date string (custom range start)
+ *   to      – ISO date string (custom range end)
+ *
+ * Response: { sensorX, sensorY, data: [{ x, y }] }
+ * Points are capped at 500 to keep the payload lean.
+ */
+router.get('/analytics/correlation', async (req, res) => {
+  try {
+    const { sensorX, sensorY } = req.query;
+
+    if (!sensorX || !sensorY) {
+      return res.status(400).json({ error: 'sensorX and sensorY are required' });
+    }
+    if (!CORRELATION_SENSORS.has(sensorX) || !CORRELATION_SENSORS.has(sensorY)) {
+      return res.status(400).json({ error: `Invalid sensor. Allowed: ${[...CORRELATION_SENSORS].join(', ')}` });
+    }
+    if (sensorX === sensorY) {
+      return res.status(400).json({ error: 'sensorX and sensorY must be different' });
+    }
+
+    // ── Date range ──────────────────────���────────────────────────────��────────
+    let since, until;
+
+    if (req.query.from && req.query.to) {
+      const fromDate = new Date(req.query.from);
+      const toDate   = new Date(req.query.to);
+      if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+        return res.status(400).json({ error: 'Invalid date format for from/to' });
+      }
+      since = fromDate;
+      until = toDate;
+      until.setHours(23, 59, 59, 999);
+    } else {
+      const range = RANGE_MS[req.query.range] ? req.query.range : '24h';
+      since = new Date(Date.now() - RANGE_MS[range]);
+      until = new Date();
+    }
+
+    // ── Aggregate — project only the two needed fields ────────────────────��───
+    const data = await SystemLog.aggregate([
+      {
+        $match: {
+          timestamp:                         { $gte: since, $lte: until },
+          [`readings.${sensorX}`]:           { $exists: true, $ne: null, $type: 'number' },
+          [`readings.${sensorY}`]:           { $exists: true, $ne: null, $type: 'number' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          x:   `$readings.${sensorX}`,
+          y:   `$readings.${sensorY}`,
+        },
+      },
+      { $limit: 500 },
+    ]);
+
+    res.json({ sensorX, sensorY, data });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /**
  * GET /api/analytics?range=24h|7d|30d
  * Returns pre-aggregated analytics derived from SystemLog and Alert collections.
