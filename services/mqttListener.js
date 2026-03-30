@@ -20,8 +20,10 @@ const BROKER_URL = process.env.MQTT_BROKER_URL ?? 'mqtt://localhost:1883';
 const TOPIC_TELEMETRY = 'mfc/system_01/telemetry';
 const TOPIC_ALERTS    = 'mfc/system_01/alerts';
 const TOPIC_COMMAND   = 'mfc/system/_01/command';
+const TOPIC_COMMAND_2 = 'mfc/system/_02/command';
 
-const VALID_COMMANDS = new Set(['MANUAL_ON', 'MANUAL_OFF', 'AUTO']);
+const VALID_COMMANDS       = new Set(['MANUAL_ON', 'MANUAL_OFF', 'AUTO']);
+const VALID_PUMP2_COMMANDS = new Set(['MANUAL_ON', 'MANUAL_OFF']);
 
 const MQTT_OPTIONS = {
   clientId:       `mfc-backend-${process.pid}-${Date.now()}`,
@@ -54,6 +56,11 @@ function createMessageHandler(client, io, SystemLog) {
     // pump_command Socket.io events.
     if (topic === TOPIC_COMMAND) {
       handleCommand(raw, io);
+      return;
+    }
+
+    if (topic === TOPIC_COMMAND_2) {
+      handleCommand2(raw, io);
       return;
     }
 
@@ -101,6 +108,21 @@ function handleCommand(command, io) {
   }
   console.log(`[mqttListener] 🔧 Pump command confirmed by broker: "${command}"`);
   io.emit('pump_command', { command, timestamp: new Date().toISOString() });
+}
+
+/**
+ * Handles a Pump 2 command (manual-only: MANUAL_ON / MANUAL_OFF).
+ *
+ * @param {string} command
+ * @param {import('socket.io').Server} io
+ */
+function handleCommand2(command, io) {
+  if (!VALID_PUMP2_COMMANDS.has(command)) {
+    console.warn(`[mqttListener] Unknown pump 2 command received: "${command}" — ignoring`);
+    return;
+  }
+  console.log(`[mqttListener] 🔧 Pump 2 command confirmed by broker: "${command}"`);
+  io.emit('pump2_command', { command, timestamp: new Date().toISOString() });
 }
 
 /**
@@ -211,7 +233,7 @@ function attachConnectionHandlers(client) {
  * Subscribes to telemetry and alert topics.
  */
 function subscribeToTopics(client) {
-  client.subscribe([TOPIC_TELEMETRY, TOPIC_ALERTS, TOPIC_COMMAND], { qos: 1 }, (err, granted) => {
+  client.subscribe([TOPIC_TELEMETRY, TOPIC_ALERTS, TOPIC_COMMAND, TOPIC_COMMAND_2], { qos: 1 }, (err, granted) => {
     if (err) {
       console.error('[mqttListener] Subscription failed:', err.message);
       return;

@@ -15,8 +15,11 @@ const { requireRole } = require('../middleware/auth');
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const COMMAND_TOPIC   = 'mfc/system/_01/command';
-const VALID_COMMANDS  = new Set(['MANUAL_ON', 'MANUAL_OFF', 'AUTO']);
+const COMMAND_TOPIC        = 'mfc/system/_01/command';
+const VALID_COMMANDS       = new Set(['MANUAL_ON', 'MANUAL_OFF', 'AUTO']);
+
+const COMMAND_TOPIC_2      = 'mfc/system/_02/command';
+const VALID_PUMP2_COMMANDS = new Set(['MANUAL_ON', 'MANUAL_OFF']);
 
 // ─── Route ────────────────────────────────────────────────────────────────────
 
@@ -62,6 +65,41 @@ router.post('/command', requireRole('admin', 'operator'), async (req, res) => {
     res.json({ ok: true, command, topic: COMMAND_TOPIC });
   } catch (err) {
     console.error('[pump] Failed to publish command:', err.message);
+    res.status(500).json({ error: 'Failed to publish command to MQTT broker' });
+  }
+});
+
+// ─── Pump 2 Route ─────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/pump/command2
+ *
+ * Manual-only control for Pump 2 — no AUTO mode.
+ * Publishes "MANUAL_ON" or "MANUAL_OFF" to the Pump 2 command topic.
+ *
+ * Body   : { command: 'MANUAL_ON' | 'MANUAL_OFF' }
+ * Returns: { ok: true, command, topic }
+ */
+router.post('/command2', requireRole('admin', 'operator'), async (req, res) => {
+  const { command } = req.body;
+
+  if (!command || !VALID_PUMP2_COMMANDS.has(command)) {
+    return res.status(400).json({
+      error: `Invalid command. Accepted values: ${[...VALID_PUMP2_COMMANDS].join(', ')}`,
+    });
+  }
+
+  const mqttClient = req.app.get('mqttClient');
+  if (!mqttClient?.connected) {
+    return res.status(503).json({ error: 'MQTT broker is not connected' });
+  }
+
+  try {
+    await mqttClient.publishAsync(COMMAND_TOPIC_2, command, { qos: 1 });
+    console.log(`[pump2] ✅ Command "${command}" published by user ${req.user._id}`);
+    res.json({ ok: true, command, topic: COMMAND_TOPIC_2 });
+  } catch (err) {
+    console.error('[pump2] Failed to publish command:', err.message);
     res.status(500).json({ error: 'Failed to publish command to MQTT broker' });
   }
 });

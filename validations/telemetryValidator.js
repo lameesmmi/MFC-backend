@@ -1,12 +1,12 @@
 'use strict';
 
-// How far in the past a packet may be before it's considered stale (e.g. broker-buffered replay)
+// How far in the past a packet may be before it's considered stale
 const MAX_LATENCY_MS = 30_000;   // 30 s
 // How far in the future a packet may be before it's rejected (accommodates ESP32 clock drift)
 const MAX_FUTURE_MS  = 60_000;   // 60 s
 
 function validateTelemetry(rawPayload) {
-  // 1. Basic Object Integrity Check
+  // 1. Integrity Check
   if (!rawPayload || typeof rawPayload !== 'object' || Array.isArray(rawPayload)) {
     return { valid: false, reason: 'Payload is not a JSON object' };
   }
