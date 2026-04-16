@@ -17,6 +17,50 @@ const { processTelemetryAlerts } = require('./alertService');
 
 // Changed default fallback to your local broker for safe testing
 const BROKER_URL = process.env.MQTT_BROKER_URL ?? 'mqtt://localhost:1883';
+
+// ─────────────────────────────────────────────────────────────────────────
+// Telemetry aggregation (multi-ESP32 support)
+// ─────────────────────────────────────────────────────────────────────────
+//
+// When multiple ESP32 clients each publish a subset of sensors, back-to-back
+// messages would otherwise cause the dashboard to see rapid partial updates
+// (e.g. one message has ph/temp, the next has tds/flow).  We collect all
+// fields that arrive within a 150 ms window and emit one merged payload so
+// the frontend always gets a complete, unified reading.
+
+const AGGREGATION_WINDOW_MS = 150;
+// Fields forwarded from validated telemetry to the aggregated payload.
+const AGGREGATED_FIELDS = [
+  'ph', 'tds', 'temperature', 'flow_rate', 'salinity',
+  'conductivity', 'voltage', 'current', 'power',
+  'valve_status', 'timestamp', 'validation',
+];
+
+let _pendingFields = {};
+let _emitTimer    = null;
+
+/**
+ * Merges `validatedData` into the pending aggregate and schedules a single
+ * Socket.io emission after AGGREGATION_WINDOW_MS.  Subsequent calls within
+ * the same window extend the merged payload without resetting the timer.
+ *
+ * @param {object} validatedData
+ * @param {import('socket.io').Server} io
+ */
+function mergeAndScheduleEmit(validatedData, io) {
+  for (const field of AGGREGATED_FIELDS) {
+    if (validatedData[field] != null) {
+      _pendingFields[field] = validatedData[field];
+    }
+  }
+
+  if (_emitTimer) return; // already scheduled for this window
+  _emitTimer = setTimeout(() => {
+    io.emit('live_telemetry', { ..._pendingFields });
+    _pendingFields = {};
+    _emitTimer    = null;
+  }, AGGREGATION_WINDOW_MS);
+}
 const TOPIC_TELEMETRY = 'mfc/system_01/telemetry';
 const TOPIC_ALERTS    = 'mfc/system_01/alerts';
 const TOPIC_COMMAND   = 'mfc/system/_01/command';
@@ -211,8 +255,10 @@ async function handleTelemetry(rawPayload, io, SystemLog) {
   // Step 3: Evaluate thresholds and fire/clear alerts (non-blocking)
   processTelemetryAlerts(io, validatedData);
 
-  // Step 4: Emit to frontend (immediate, non-blocking)
-  io.emit('live_telemetry', validatedData);
+  // Step 4: Merge into the aggregation window and schedule a single emit.
+  // Multiple ESP32 clients publishing within 150 ms are bundled into one
+  // Socket.io event so the dashboard sees a unified, complete reading.
+  mergeAndScheduleEmit(validatedData, io);
 }
 
 /**
