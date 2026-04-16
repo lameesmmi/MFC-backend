@@ -110,12 +110,26 @@ describe('validateTelemetry', () => {
   });
 
   describe('3. Hard Gatekeeper: Latency checks', () => {
-    it('should reject packets older than MAX_LATENCY_MS', () => {
+    it('should reject packets older than MAX_LATENCY_MS (5 s — Constraint 5)', () => {
       const payload = getValidPayload();
       payload.timestamp = new Date(Date.now() - MAX_LATENCY_MS - 1000).toISOString();
       const result = validateTelemetry(payload);
       assert.strictEqual(result.valid, false);
       assert(result.reason.includes('too old'));
+    });
+
+    it('should reject a packet exactly 6 s old (Constraint 5 boundary)', () => {
+      const payload = getValidPayload();
+      payload.timestamp = new Date(Date.now() - 6000).toISOString(); // 6 s > 5 s limit
+      const result = validateTelemetry(payload);
+      assert.strictEqual(result.valid, false);
+    });
+
+    it('should accept a packet 4 s old (within 5 s window — Constraint 5)', () => {
+      const payload = getValidPayload();
+      payload.timestamp = new Date(Date.now() - 4000).toISOString(); // 4 s < 5 s limit
+      const result = validateTelemetry(payload);
+      assert.strictEqual(result.valid, true);
     });
 
     it('should accept packets with small clock drift (within MAX_FUTURE_MS)', () => {

@@ -1,7 +1,8 @@
 'use strict';
 
 // How far in the past a packet may be before it's considered stale
-const MAX_LATENCY_MS = 30_000;   // 30 s
+// Constraint 5: packets with a timestamp older than 5 seconds must be rejected
+const MAX_LATENCY_MS = 5_000;    // 5 s
 // How far in the future a packet may be before it's rejected (accommodates ESP32 clock drift)
 const MAX_FUTURE_MS  = 60_000;   // 60 s
 
