@@ -9,7 +9,7 @@ const cors   = require('cors');
 const jwt    = require('jsonwebtoken');
 
 // Import our custom modules
-const initMqttListener = require('./services/mqttListener');
+const { initMqttListener, getPumpState } = require('./services/mqttListener');
 const SystemLog  = require('./models/SystemLog');
 const apiRoutes    = require('./routes/api');
 const authRoutes   = require('./routes/auth');
@@ -77,9 +77,13 @@ io.use((socket, next) => {
   }
 });
 
-// 7. Socket.io Connection Log
+// 7. Socket.io Connection — log and immediately sync pump state to new client
 io.on('connection', (socket) => {
   console.log('🔌 New React Client Connected:', socket.id, '| user:', socket.userId);
+
+  // Send the current pump modes so every new tab/client starts in the
+  // correct state without waiting for the next MQTT command.
+  socket.emit('pump_state_sync', getPumpState());
 
   socket.on('disconnect', () => {
     console.log('🔌 Client Disconnected');

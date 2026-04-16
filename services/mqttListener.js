@@ -68,8 +68,25 @@ const TOPIC_COMMAND_2 = 'mfc/system/_02/command';
 const TOPIC_COMMAND_3 = 'mfc/system/_03/command';
 
 const VALID_COMMANDS       = new Set(['MANUAL_ON', 'MANUAL_OFF', 'AUTO']);
-const VALID_PUMP2_COMMANDS = new Set(['MANUAL_ON', 'MANUAL_OFF']);
-const VALID_PUMP3_COMMANDS = new Set(['MANUAL_ON', 'MANUAL_OFF']);
+const VALID_PUMP2_COMMANDS = new Set(['MANUAL_ON', 'MANUAL_OFF', 'AUTO']);
+const VALID_PUMP3_COMMANDS = new Set(['MANUAL_ON', 'MANUAL_OFF', 'AUTO']);
+
+// ─── Pump state store ─────────────────────────────────────────────────────────
+//
+// Tracks the last-known command for each pump so that newly connecting
+// Socket.io clients can be synced immediately instead of waiting for the
+// next MQTT message to arrive.
+
+const pumpState = {
+  pump1: 'AUTO',
+  pump2: 'MANUAL_OFF',
+  pump3: 'MANUAL_OFF',
+};
+
+/** Returns a snapshot of the current pump states. */
+function getPumpState() {
+  return { ...pumpState };
+}
 
 const MQTT_OPTIONS = {
   clientId:       `mfc-backend-${process.pid}-${Date.now()}`,
@@ -157,12 +174,13 @@ function handleCommand(command, io) {
     console.warn(`[mqttListener] Unknown pump command received: "${command}" — ignoring`);
     return;
   }
-  console.log(`[mqttListener] 🔧 Pump command confirmed by broker: "${command}"`);
+  pumpState.pump1 = command;
+  console.log(`[mqttListener] 🔧 Pump 1 command confirmed by broker: "${command}"`);
   io.emit('pump_command', { command, timestamp: new Date().toISOString() });
 }
 
 /**
- * Handles a Pump 2 command (manual-only: MANUAL_ON / MANUAL_OFF).
+ * Handles a Pump 2 command (MANUAL_ON / MANUAL_OFF / AUTO).
  *
  * @param {string} command
  * @param {import('socket.io').Server} io
@@ -172,12 +190,13 @@ function handleCommand2(command, io) {
     console.warn(`[mqttListener] Unknown pump 2 command received: "${command}" — ignoring`);
     return;
   }
+  pumpState.pump2 = command;
   console.log(`[mqttListener] 🔧 Pump 2 command confirmed by broker: "${command}"`);
   io.emit('pump2_command', { command, timestamp: new Date().toISOString() });
 }
 
 /**
- * Handles a Pump 3 command (manual-only: MANUAL_ON / MANUAL_OFF).
+ * Handles a Pump 3 command (MANUAL_ON / MANUAL_OFF / AUTO).
  *
  * @param {string} command
  * @param {import('socket.io').Server} io
@@ -187,6 +206,7 @@ function handleCommand3(command, io) {
     console.warn(`[mqttListener] Unknown pump 3 command received: "${command}" — ignoring`);
     return;
   }
+  pumpState.pump3 = command;
   console.log(`[mqttListener] 🔧 Pump 3 command confirmed by broker: "${command}"`);
   io.emit('pump3_command', { command, timestamp: new Date().toISOString() });
 }
@@ -350,4 +370,4 @@ function initMqttListener(io, SystemLog) {
   return client;
 }
 
-module.exports = initMqttListener;
+module.exports = { initMqttListener, getPumpState };
