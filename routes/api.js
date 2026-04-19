@@ -185,6 +185,7 @@ router.get('/analytics', async (req, res) => {
             avgPh:      { $avg: '$readings.ph'          },
             avgTds:     { $avg: '$readings.tds'         },
             avgTemp:    { $avg: '$readings.temperature' },
+            avgVoltage: { $avg: '$readings.voltage'     },
             passCount:  { $sum: { $cond: [{ $eq: ['$validation.status', 'PASS'] }, 1, 0] } },
             failCount:  { $sum: { $cond: [{ $eq: ['$validation.status', 'FAIL'] }, 1, 0] } },
             count:      { $sum: 1 },
@@ -259,9 +260,10 @@ router.get('/analytics', async (req, res) => {
       })),
       sensorTrends: buckets.map(b => ({
         time:        b._id,
-        ph:          +(b.avgPh   || 0).toFixed(2),
-        tds:         +(b.avgTds  || 0).toFixed(0),
-        temperature: +(b.avgTemp || 0).toFixed(1),
+        ph:          +(b.avgPh      || 0).toFixed(2),
+        tds:         +(b.avgTds     || 0).toFixed(0),
+        temperature: +(b.avgTemp    || 0).toFixed(1),
+        voltage:     +(b.avgVoltage || 0).toFixed(4),
       })),
       failuresBySensor: failedParams.map(f => ({ sensor: f._id, count: f.count })),
       alertStats: {
