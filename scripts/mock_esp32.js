@@ -13,6 +13,9 @@ const options = {
 const brokerUrl = process.env.MQTT_BROKER_URL || 'mqtts://YOUR_CLUSTER_URL.s1.eu.hivemq.cloud:8883';
 const client = mqtt.connect(brokerUrl, options);
 
+const PREFIX           = process.env.MQTT_TOPIC_PREFIX ?? '';
+const TOPIC_TELEMETRY  = `${PREFIX}mfc/system_01/telemetry`;
+
 
 
 // ─── Scenario cycle ───────────────────────────────────────────────────────────
@@ -234,7 +237,7 @@ client.on('connect', () => {
       ...(raw.valve_status !== undefined && { valve_status: raw.valve_status }),
     };
 
-    client.publish('mfc/system_01/telemetry', JSON.stringify(payload));
+    client.publish(TOPIC_TELEMETRY, JSON.stringify(payload));
 
     const ALL_FIELDS = ['ph', 'tds', 'temperature', 'flow_rate', 'salinity', 'conductivity', 'current', 'voltage', 'power', 'valve_status'];
     const missing = ALL_FIELDS.filter(f => !(f in payload));

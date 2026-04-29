@@ -61,11 +61,12 @@ function mergeAndScheduleEmit(validatedData, io) {
     _emitTimer    = null;
   }, AGGREGATION_WINDOW_MS);
 }
-const TOPIC_TELEMETRY = 'mfc/system_01/telemetry';
-const TOPIC_ALERTS    = 'mfc/system_01/alerts';
-const TOPIC_COMMAND   = 'mfc/system/_01/command';
-const TOPIC_COMMAND_2 = 'mfc/system/_02/command';
-const TOPIC_COMMAND_3 = 'mfc/system/_03/command';
+const PREFIX          = process.env.MQTT_TOPIC_PREFIX ?? '';
+const TOPIC_TELEMETRY = `${PREFIX}mfc/system_01/telemetry`;
+const TOPIC_ALERTS    = `${PREFIX}mfc/system_01/alerts`;
+const TOPIC_COMMAND   = `${PREFIX}mfc/system/_01/command`;
+const TOPIC_COMMAND_2 = `${PREFIX}mfc/system/_02/command`;
+const TOPIC_COMMAND_3 = `${PREFIX}mfc/system/_03/command`;
 
 const VALID_COMMANDS       = new Set(['MANUAL_ON', 'MANUAL_OFF', 'AUTO']);
 const VALID_PUMP2_COMMANDS = new Set(['MANUAL_ON', 'MANUAL_OFF', 'AUTO']);

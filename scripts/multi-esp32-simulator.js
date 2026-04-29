@@ -37,7 +37,8 @@ if (fs.existsSync(envPath)) {
 }
 
 const BROKER_URL = process.env.MQTT_BROKER_URL ?? 'mqtt://localhost:1883';
-const TOPIC      = 'mfc/system_01/telemetry';
+const PREFIX     = process.env.MQTT_TOPIC_PREFIX ?? '';
+const TOPIC      = `${PREFIX}mfc/system_01/telemetry`;
 
 // ─── Colour helpers ───────────────────────────────────────────────────────────
 const C = {
@@ -269,7 +270,7 @@ if (!run) {
 
 console.log(colour(C.bold + C.cyan, '\nMFC Multi-ESP32 Simulator'));
 console.log(colour(C.dim, `Broker : ${BROKER_URL}`));
-console.log(colour(C.dim, `Topic  : ${TOPIC}\n`));
+console.log(colour(C.dim, `Topic  : ${TOPIC}${PREFIX ? '  (prefixed — local test mode)' : ''}\n`));
 
 run().catch(err => {
   console.error(colour(C.red, `[sim] Fatal: ${err.message}`));

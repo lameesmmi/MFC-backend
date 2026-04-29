@@ -28,7 +28,8 @@ const mqtt = require('mqtt');
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
-const COMMAND_TOPIC    = 'mfc/system/_01/command';
+const PREFIX           = process.env.MQTT_TOPIC_PREFIX ?? '';
+const COMMAND_TOPIC    = `${PREFIX}mfc/system/_01/command`;
 const COMMANDS         = ['MANUAL_ON', 'MANUAL_OFF', 'AUTO'];
 const COMMAND_DELAY_MS = 3_000;   // pause between each published command
 const LINGER_MS        = 5_000;   // wait after last command before disconnecting

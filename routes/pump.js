@@ -15,13 +15,14 @@ const { requireRole } = require('../middleware/auth');
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const COMMAND_TOPIC        = 'mfc/system/_01/command';
+const PREFIX               = process.env.MQTT_TOPIC_PREFIX ?? '';
+const COMMAND_TOPIC        = `${PREFIX}mfc/system/_01/command`;
 const VALID_COMMANDS       = new Set(['MANUAL_ON', 'MANUAL_OFF', 'AUTO']);
 
-const COMMAND_TOPIC_2      = 'mfc/system/_02/command';
+const COMMAND_TOPIC_2      = `${PREFIX}mfc/system/_02/command`;
 const VALID_PUMP2_COMMANDS = new Set(['MANUAL_ON', 'MANUAL_OFF', 'AUTO']);
 
-const COMMAND_TOPIC_3      = 'mfc/system/_03/command';
+const COMMAND_TOPIC_3      = `${PREFIX}mfc/system/_03/command`;
 const VALID_PUMP3_COMMANDS = new Set(['MANUAL_ON', 'MANUAL_OFF', 'AUTO']);
 
 // ─── Route ────────────────────────────────────────────────────────────────────
