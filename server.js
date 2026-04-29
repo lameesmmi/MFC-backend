@@ -91,7 +91,7 @@ io.on('connection', (socket) => {
 });
 
 // 8. Start the Server
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8000;
 server.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📡 MQTT Broker target: ${process.env.MQTT_BROKER_URL || 'mqtt://localhost:1883'}`);
