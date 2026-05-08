@@ -500,8 +500,7 @@ function formatSettings(doc) {
 
 // ─── MQTT config helper ───────────────────────────────────────────────────────
 
-const PREFIX       = process.env.MQTT_TOPIC_PREFIX ?? '';
-const TOPIC_CONFIG = `${PREFIX}mfc/system/_01/config`;
+const TOPIC_CONFIG = 'mfc/system/_01/config';
 
 /**
  * Publishes the current threshold config to the ESP32 via MQTT.
